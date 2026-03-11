@@ -1,7 +1,7 @@
 # WatchTower AI — Professional Code Review
 
-**Date:** March 10, 2026
-**Version:** 4.0 (Production Hardened)
+**Date:** March 11, 2026
+**Version:** 4.1 (Admin API + Multi-Client Management)
 **Developer:** Marina Kurland
 **Status:** Live — Verified in production (scheduled run confirmed March 10, 2026 at 08:00)
 
@@ -15,7 +15,7 @@
 | Code Quality | 9.5/10 | Readable, documented, lazy initialization, smart chunking, no magic numbers |
 | Security | 9.5/10 | API key auth, SSRF prevention, CORS restriction, input validation, env isolation |
 | Scalability | 9.5/10 | Multi-client, SQLite, JS rendering, trend analysis, Docker-ready |
-| Testing | 10/10 | 139 tests across 14 test files covering all modules |
+| Testing | 10/10 | 157 tests across 14 test files covering all modules |
 | Documentation | 10/10 | Full README, code review, product plan, inline docstrings |
 | Resilience | 9.5/10 | Exponential backoff, circuit breaker, retry logic, job timeout, graceful shutdown |
 | Deployment | 9.5/10 | Dockerfile, docker-compose, Gunicorn WSGI, JSON logging, health checks |
@@ -34,7 +34,7 @@
 
 **5. Production-Ready Infrastructure** — Multi-stage Dockerfile keeps images small, docker-compose orchestrates agent + dashboard services, Gunicorn serves the API, JSON logging integrates with log aggregation tools, and health checks enable container orchestration.
 
-**6. Comprehensive Test Suite** — 139 tests cover every module including edge cases, error paths, security boundaries, retry logic, and integration flows. Tests use proper mocking to avoid external dependencies.
+**6. Comprehensive Test Suite** — 157 tests cover every module including edge cases, error paths, security boundaries, retry logic, and integration flows. Tests use proper mocking to avoid external dependencies.
 
 **7. Multi-Client Architecture** — Each client has isolated config, industry context, and Slack channel. Adding a new client is just adding a JSON file.
 
@@ -189,7 +189,8 @@
 | `test_integration.py` | 5 | End-to-end pipeline verification |
 | `test_validation.py` | 18 | SSRF prevention, input validation |
 | `test_circuit_breaker.py` | 10 | Circuit breaker state machine |
-| **Total** | **139** | **16 modules** |
+| `test_admin_api.py` | 18 | Admin API CRUD, validation, auth |
+| **Total** | **157** | **17 modules** |
 
 ---
 
@@ -262,6 +263,37 @@
 
 ---
 
+## Phase 5: Admin API — Client Management (v4.1)
+
+### What Was Added
+
+Admin REST API for managing clients and competitors through API calls instead of manually editing JSON files. This is the foundation for multi-tenant operation — each company can be onboarded and configured through the API.
+
+| # | Feature | Endpoint |
+|---|---------|----------|
+| 1 | List all clients | `GET /api/admin/clients` |
+| 2 | Get client details | `GET /api/admin/clients/<name>` |
+| 3 | Create new client | `POST /api/admin/clients` |
+| 4 | Update client config | `PUT /api/admin/clients/<name>` |
+| 5 | Delete a client | `DELETE /api/admin/clients/<name>` |
+| 6 | Add competitor to client | `POST /api/admin/clients/<name>/competitors` |
+| 7 | Remove competitor from client | `DELETE /api/admin/clients/<name>/competitors/<comp>` |
+
+### Security
+- All admin endpoints require the same API key authentication
+- Full URL validation on all competitor URLs (SSRF prevention)
+- Competitor name validation (injection prevention)
+- Duplicate detection for both clients and competitors
+
+### New Competitors Added
+- **Fortinet** (https://www.fortinet.com) — added to cybersecurity_startup client
+- **Check Point** (https://www.checkpoint.com) — added to cybersecurity_startup client
+
+### New Test File
+- `tests/test_admin_api.py` — 18 tests covering all CRUD operations, validation, auth, and error cases
+
+---
+
 ## Open Issues — Future Enhancements (Not Required for Production)
 
 ### 1. Webhook Support (Beyond Slack)
@@ -293,8 +325,8 @@
 
 ## Summary
 
-WatchTower AI v4.0 is a production-hardened, fully containerized competitive intelligence platform. The system went from 9.1/10 to 9.8/10 through four phases of improvements: security hardening (API auth, SSRF prevention, input validation), resilience patterns (exponential backoff, circuit breaker, retry logic, job timeout), comprehensive testing (41 → 139 tests across 16 modules), and deployment readiness (Docker, Gunicorn, JSON logging).
+WatchTower AI v4.0 is a production-hardened, fully containerized competitive intelligence platform. The system went from 9.1/10 to 9.8/10 through four phases of improvements: security hardening (API auth, SSRF prevention, input validation), resilience patterns (exponential backoff, circuit breaker, retry logic, job timeout), comprehensive testing (41 → 157 tests across 17 modules), and deployment readiness (Docker, Gunicorn, JSON logging).
 
-The system is verified live in production — the scheduled daily scan at 08:00 ran successfully on March 10, 2026. All 139 tests pass. The remaining open issues are low-severity enhancements that don't block production deployment.
+The system is verified live in production — the scheduled daily scan at 08:00 ran successfully on March 10, 2026. v4.1 adds an Admin API for managing clients and competitors through REST endpoints, enabling multi-tenant operation. All 157 tests pass across 17 modules. The remaining open issues are low-severity enhancements that don't block production deployment.
 
 **For a developer picking up this project:** Start with `README.md` for setup instructions, run `pytest` to verify tests, then review this document for architecture decisions. All configuration is in `.env` (see `.env.example` for template). The codebase follows standard Python project structure with clear separation of concerns.

@@ -36,6 +36,28 @@
       ],
       "active": true,
       "js_render": false
+    },
+    {
+      "name": "Fortinet",
+      "url": "https://www.fortinet.com",
+      "pages": [
+        "https://www.fortinet.com/",
+        "https://www.fortinet.com/products",
+        "https://www.fortinet.com/blog"
+      ],
+      "active": true,
+      "js_render": false
+    },
+    {
+      "name": "Check Point",
+      "url": "https://www.checkpoint.com",
+      "pages": [
+        "https://www.checkpoint.com/",
+        "https://www.checkpoint.com/quantum/",
+        "https://blog.checkpoint.com/"
+      ],
+      "active": true,
+      "js_render": false
     }
   ]
 }
