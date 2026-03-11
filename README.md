@@ -15,7 +15,7 @@ WatchTower runs a daily pipeline:
 ## Installation
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/kurland1979/watchtower-ai.git
 cd WatchTower-AI
 pip install -r requirements.txt
 ```
