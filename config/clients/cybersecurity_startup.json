@@ -1,0 +1,41 @@
+{
+  "client_name": "cybersecurity_startup",
+  "industry": "cybersecurity startup",
+  "slack_channel_id": "",
+  "slack_bot_token": "",
+  "competitors": [
+    {
+      "name": "CrowdStrike",
+      "url": "https://www.crowdstrike.com",
+      "pages": [
+        "https://www.crowdstrike.com/en-us/",
+        "https://www.crowdstrike.com/en-us/products/",
+        "https://www.crowdstrike.com/en-us/news/"
+      ],
+      "active": true,
+      "js_render": false
+    },
+    {
+      "name": "SentinelOne",
+      "url": "https://www.sentinelone.com",
+      "pages": [
+        "https://www.sentinelone.com/",
+        "https://www.sentinelone.com/platform/",
+        "https://www.sentinelone.com/blog/"
+      ],
+      "active": true,
+      "js_render": true
+    },
+    {
+      "name": "Palo Alto Networks",
+      "url": "https://www.paloaltonetworks.com",
+      "pages": [
+        "https://www.paloaltonetworks.com/",
+        "https://www.paloaltonetworks.com/products",
+        "https://www.paloaltonetworks.com/blog"
+      ],
+      "active": true,
+      "js_render": false
+    }
+  ]
+}

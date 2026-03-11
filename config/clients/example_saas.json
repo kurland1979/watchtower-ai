@@ -1,0 +1,28 @@
+{
+  "client_name": "example_saas",
+  "industry": "B2B SaaS project management",
+  "slack_channel_id": "",
+  "slack_bot_token": "",
+  "competitors": [
+    {
+      "name": "Asana",
+      "url": "https://asana.com",
+      "pages": [
+        "https://asana.com/",
+        "https://asana.com/pricing"
+      ],
+      "active": true,
+      "js_render": false
+    },
+    {
+      "name": "Monday.com",
+      "url": "https://monday.com",
+      "pages": [
+        "https://monday.com/",
+        "https://monday.com/pricing"
+      ],
+      "active": true,
+      "js_render": true
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+# Environment variables - NEVER upload to GitHub
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Logs
+logs/*.log
+logs/*.json
+logs/*.db
+
+# Virtual environment
+venv/
+.venv/
+
+# IDE
+.vscode/
+.cursor/
+.idea/
