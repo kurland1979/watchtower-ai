@@ -41,6 +41,8 @@ from agents.trend_analyzer import (
     analyze_competitor_trends,
     get_all_competitor_names,
     generate_trend_report,
+    get_scans_for_period,
+    calculate_changes,
 )
 from utils.validation import validate_competitor_name, validate_url
 from config.client_loader import load_all_clients, load_single_client, CLIENTS_DIR
@@ -187,6 +189,158 @@ def trend_single(competitor_name: str):
 
     result = analyze_competitor_trends(competitor_name, days)
     return jsonify(result)
+
+
+# ============================================================
+# Report API — Daily / Weekly / Monthly Comparisons
+# ============================================================
+#
+# These endpoints power the dashboard's comparison tabs.
+# Each returns structured data with scan-by-scan diffs so the
+# frontend can render tables and charts.
+# ============================================================
+
+
+def _build_comparison_data(competitor_name: str, days: int) -> dict:
+    """
+    Builds comparison data for a competitor over a given period.
+    Returns scan pairs with similarity ratios and change detection.
+    """
+    scans = get_scans_for_period(competitor_name, days)
+    changes = calculate_changes(scans)
+
+    entries = []
+    for i, change in enumerate(changes):
+        prev_scan = scans[i]
+        curr_scan = scans[i + 1]
+
+        # Extract a brief diff summary (first 200 chars that differ)
+        prev_text = prev_scan["text"]
+        curr_text = curr_scan["text"]
+
+        entries.append({
+            "date": change["date"],
+            "prev_date": prev_scan["timestamp"],
+            "similarity": change["similarity_ratio"],
+            "is_significant": change["is_significant"],
+            "change_percent": round((1 - change["similarity_ratio"]) * 100, 1),
+            "prev_length": len(prev_text),
+            "curr_length": len(curr_text),
+            "length_diff": len(curr_text) - len(prev_text),
+        })
+
+    sig_count = sum(1 for e in entries if e["is_significant"])
+
+    return {
+        "competitor": competitor_name,
+        "period_days": days,
+        "total_scans": len(scans),
+        "total_comparisons": len(entries),
+        "significant_changes": sig_count,
+        "entries": entries,
+    }
+
+
+@app.route("/api/reports/daily", methods=["GET"])
+@require_api_key
+def report_daily():
+    """
+    Daily comparison: today vs yesterday for all competitors.
+    Returns the latest scan pair for each competitor.
+    """
+    names = get_all_competitor_names()
+    results = []
+
+    for name in names:
+        scans = get_scans_for_period(name, days=2)
+        if len(scans) < 2:
+            results.append({
+                "competitor": name,
+                "status": "no_comparison",
+                "message": "Not enough scans yet (need at least 2)",
+                "latest_scan": scans[-1]["timestamp"] if scans else None,
+            })
+            continue
+
+        # Compare the two most recent scans
+        prev_scan = scans[-2]
+        curr_scan = scans[-1]
+        changes = calculate_changes([prev_scan, curr_scan])
+
+        if changes:
+            change = changes[0]
+            results.append({
+                "competitor": name,
+                "status": "compared",
+                "scan_date": curr_scan["timestamp"],
+                "prev_date": prev_scan["timestamp"],
+                "similarity": change["similarity_ratio"],
+                "change_percent": round((1 - change["similarity_ratio"]) * 100, 1),
+                "is_significant": change["is_significant"],
+                "curr_length": len(curr_scan["text"]),
+                "prev_length": len(prev_scan["text"]),
+                "length_diff": len(curr_scan["text"]) - len(prev_scan["text"]),
+            })
+
+    return jsonify({"report": "daily", "competitors": results, "total": len(results)})
+
+
+@app.route("/api/reports/weekly", methods=["GET"])
+@require_api_key
+def report_weekly():
+    """
+    Weekly report: 7-day comparison data for all competitors.
+    Returns day-by-day changes with similarity ratios for charting.
+    """
+    names = get_all_competitor_names()
+    results = []
+
+    for name in names:
+        data = _build_comparison_data(name, days=7)
+        results.append(data)
+
+    return jsonify({"report": "weekly", "period_days": 7, "competitors": results})
+
+
+@app.route("/api/reports/weekly/<competitor_name>", methods=["GET"])
+@require_api_key
+def report_weekly_single(competitor_name: str):
+    """Weekly report for a single competitor."""
+    is_valid, error = validate_competitor_name(competitor_name)
+    if not is_valid:
+        return jsonify({"error": f"Invalid competitor name: {error}"}), 400
+
+    data = _build_comparison_data(competitor_name, days=7)
+    return jsonify(data)
+
+
+@app.route("/api/reports/monthly", methods=["GET"])
+@require_api_key
+def report_monthly():
+    """
+    Monthly report: 30-day comparison data for all competitors.
+    Returns day-by-day changes with similarity ratios for charting.
+    """
+    names = get_all_competitor_names()
+    results = []
+
+    for name in names:
+        data = _build_comparison_data(name, days=30)
+        results.append(data)
+
+    return jsonify({"report": "monthly", "period_days": 30, "competitors": results})
+
+
+@app.route("/api/reports/monthly/<competitor_name>", methods=["GET"])
+@require_api_key
+def report_monthly_single(competitor_name: str):
+    """Monthly report for a single competitor."""
+    is_valid, error = validate_competitor_name(competitor_name)
+    if not is_valid:
+        return jsonify({"error": f"Invalid competitor name: {error}"}), 400
+
+    data = _build_comparison_data(competitor_name, days=30)
+    return jsonify(data)
 
 
 # ============================================================

@@ -1,7 +1,7 @@
 # WatchTower AI — Professional Code Review
 
 **Date:** March 11, 2026
-**Version:** 4.1 (Admin API + Multi-Client Management)
+**Version:** 4.2 (Admin API + Dashboard Reports)
 **Developer:** Marina Kurland
 **Status:** Live — Verified in production (scheduled run confirmed March 10, 2026 at 08:00)
 
@@ -15,7 +15,7 @@
 | Code Quality | 9.5/10 | Readable, documented, lazy initialization, smart chunking, no magic numbers |
 | Security | 9.5/10 | API key auth, SSRF prevention, CORS restriction, input validation, env isolation |
 | Scalability | 9.5/10 | Multi-client, SQLite, JS rendering, trend analysis, Docker-ready |
-| Testing | 10/10 | 157 tests across 14 test files covering all modules |
+| Testing | 10/10 | 174 tests across 14 test files covering all modules |
 | Documentation | 10/10 | Full README, code review, product plan, inline docstrings |
 | Resilience | 9.5/10 | Exponential backoff, circuit breaker, retry logic, job timeout, graceful shutdown |
 | Deployment | 9.5/10 | Dockerfile, docker-compose, Gunicorn WSGI, JSON logging, health checks |
@@ -34,7 +34,7 @@
 
 **5. Production-Ready Infrastructure** — Multi-stage Dockerfile keeps images small, docker-compose orchestrates agent + dashboard services, Gunicorn serves the API, JSON logging integrates with log aggregation tools, and health checks enable container orchestration.
 
-**6. Comprehensive Test Suite** — 157 tests cover every module including edge cases, error paths, security boundaries, retry logic, and integration flows. Tests use proper mocking to avoid external dependencies.
+**6. Comprehensive Test Suite** — 174 tests cover every module including edge cases, error paths, security boundaries, retry logic, and integration flows. Tests use proper mocking to avoid external dependencies.
 
 **7. Multi-Client Architecture** — Each client has isolated config, industry context, and Slack channel. Adding a new client is just adding a JSON file.
 
@@ -190,7 +190,8 @@
 | `test_validation.py` | 18 | SSRF prevention, input validation |
 | `test_circuit_breaker.py` | 10 | Circuit breaker state machine |
 | `test_admin_api.py` | 18 | Admin API CRUD, validation, auth |
-| **Total** | **157** | **17 modules** |
+| `test_report_api.py` | 17 | Report API daily/weekly/monthly |
+| **Total** | **174** | **18 modules** |
 
 ---
 
@@ -294,6 +295,41 @@ Admin REST API for managing clients and competitors through API calls instead of
 
 ---
 
+## Phase 6: Dashboard Reports — Daily / Weekly / Monthly (v4.2)
+
+### What Was Added
+
+Three new dashboard tabs with supporting API endpoints for time-based comparison reports.
+
+**New API Endpoints:**
+
+| # | Endpoint | Purpose |
+|---|----------|---------|
+| 1 | `GET /api/reports/daily` | Today vs yesterday for all competitors |
+| 2 | `GET /api/reports/weekly` | 7-day comparison data for all competitors |
+| 3 | `GET /api/reports/weekly/<name>` | 7-day data for a single competitor |
+| 4 | `GET /api/reports/monthly` | 30-day comparison data for all competitors |
+| 5 | `GET /api/reports/monthly/<name>` | 30-day data for a single competitor |
+
+**New Dashboard Tabs:**
+
+| Tab | What It Shows |
+|-----|---------------|
+| Daily Comparison | Table: each competitor's latest scan vs previous, change %, status badge, size diff, scan date/time |
+| Weekly Report | Clickable competitor cards with summary + Chart.js bar chart of change % over 7 days + detail table |
+| Monthly Report | Same as weekly but for 30 days — per-competitor chart + table with all scan comparisons |
+
+### Design Preserved
+- Same dark theme (Tailwind, #0f172a background)
+- Same styling patterns (cards, badges, progress bars)
+- Existing 3 tabs (System Health, Trend Analysis, Scan History) untouched
+- Responsive layout with horizontal tab scroll on mobile
+
+### New Test File
+- `tests/test_report_api.py` — 17 tests covering daily/weekly/monthly endpoints, auth, validation, edge cases
+
+---
+
 ## Open Issues — Future Enhancements (Not Required for Production)
 
 ### 1. Webhook Support (Beyond Slack)
@@ -325,8 +361,8 @@ Admin REST API for managing clients and competitors through API calls instead of
 
 ## Summary
 
-WatchTower AI v4.0 is a production-hardened, fully containerized competitive intelligence platform. The system went from 9.1/10 to 9.8/10 through four phases of improvements: security hardening (API auth, SSRF prevention, input validation), resilience patterns (exponential backoff, circuit breaker, retry logic, job timeout), comprehensive testing (41 → 157 tests across 17 modules), and deployment readiness (Docker, Gunicorn, JSON logging).
+WatchTower AI v4.0 is a production-hardened, fully containerized competitive intelligence platform. The system went from 9.1/10 to 9.8/10 through four phases of improvements: security hardening (API auth, SSRF prevention, input validation), resilience patterns (exponential backoff, circuit breaker, retry logic, job timeout), comprehensive testing (41 → 174 tests across 18 modules), and deployment readiness (Docker, Gunicorn, JSON logging).
 
-The system is verified live in production — the scheduled daily scan at 08:00 ran successfully on March 10, 2026. v4.1 adds an Admin API for managing clients and competitors through REST endpoints, enabling multi-tenant operation. All 157 tests pass across 17 modules. The remaining open issues are low-severity enhancements that don't block production deployment.
+The system is verified live in production — the scheduled daily scan at 08:00 ran successfully on March 10, 2026. v4.1 adds an Admin API for managing clients and competitors through REST endpoints, enabling multi-tenant operation. All 174 tests pass across 18 modules. The remaining open issues are low-severity enhancements that don't block production deployment.
 
 **For a developer picking up this project:** Start with `README.md` for setup instructions, run `pytest` to verify tests, then review this document for architecture decisions. All configuration is in `.env` (see `.env.example` for template). The codebase follows standard Python project structure with clear separation of concerns.

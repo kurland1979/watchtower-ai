@@ -18,11 +18,17 @@
         .badge-increasing { background: #7f1d1d; color: #fca5a5; }
         .badge-decreasing { background: #064e3b; color: #6ee7b7; }
         .badge-stable { background: #1e3a5f; color: #93c5fd; }
+        .badge-significant { background: #7f1d1d; color: #fca5a5; }
+        .badge-minor { background: #064e3b; color: #6ee7b7; }
+        .badge-nodata { background: #374151; color: #9ca3af; }
         .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; }
         .tab-inactive { border-bottom: 2px solid transparent; color: #94a3b8; }
         .tab-inactive:hover { color: #e2e8f0; }
         .progress-bar { background: #334155; border-radius: 9999px; overflow: hidden; }
         .progress-fill { background: linear-gradient(90deg, #3b82f6, #8b5cf6); border-radius: 9999px; transition: width 0.5s ease; }
+        .table-header { background: #0f172a; }
+        .table-row:hover { background: #263348; }
+        .chart-container { position: relative; height: 250px; }
     </style>
 </head>
 <body>
@@ -46,6 +52,24 @@
             }
         }
 
+        // --- Utility: Format date ---
+        function formatDate(isoString) {
+            if (!isoString) return "N/A";
+            const d = new Date(isoString);
+            return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+        }
+
+        function formatTime(isoString) {
+            if (!isoString) return "";
+            const d = new Date(isoString);
+            return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+        }
+
+        function formatDateTime(isoString) {
+            if (!isoString) return "N/A";
+            return `${formatDate(isoString)} ${formatTime(isoString)}`;
+        }
+
         // --- Badge Component ---
         function Badge({ text, type }) {
             const classes = {
@@ -55,6 +79,9 @@
                 decreasing: "badge-decreasing",
                 stable: "badge-stable",
                 insufficient_data: "badge-stable",
+                significant: "badge-significant",
+                minor: "badge-minor",
+                nodata: "badge-nodata",
             };
             return (
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${classes[type] || "badge-stable"}`}>
@@ -63,7 +90,7 @@
             );
         }
 
-        // --- Health Overview ---
+        // --- Health Overview (EXISTING — untouched) ---
         function HealthPanel({ health }) {
             if (!health) return <div className="card p-6 text-center text-gray-400">Loading health data...</div>;
 
@@ -90,7 +117,7 @@
             );
         }
 
-        // --- Trend Cards ---
+        // --- Trend Cards (EXISTING — untouched) ---
         function TrendPanel({ trends }) {
             if (!trends) return <div className="card p-6 text-center text-gray-400">Loading trend data...</div>;
 
@@ -139,7 +166,7 @@
             );
         }
 
-        // --- Scan History ---
+        // --- Scan History (EXISTING — untouched) ---
         function ScanPanel({ competitors, selectedCompetitor, setSelectedCompetitor, scans }) {
             if (!competitors || competitors.length === 0) {
                 return <div className="card p-6 text-center text-gray-400">No competitors found in the database.</div>;
@@ -195,6 +222,276 @@
             );
         }
 
+        // ============================================================
+        // NEW TABS
+        // ============================================================
+
+        // --- Change Bar (visual indicator of change %) ---
+        function ChangeBar({ percent }) {
+            const color = percent > 15 ? "#ef4444" : percent > 5 ? "#f59e0b" : "#22c55e";
+            return (
+                <div className="flex items-center gap-2">
+                    <div className="progress-bar h-2 w-24">
+                        <div style={{ width: `${Math.min(percent, 100)}%`, background: color, borderRadius: "9999px", height: "100%" }}></div>
+                    </div>
+                    <span className="text-xs text-gray-400">{percent}%</span>
+                </div>
+            );
+        }
+
+        // --- Daily Comparison Tab ---
+        function DailyPanel({ dailyData }) {
+            if (!dailyData) return <div className="card p-6 text-center text-gray-400">Loading daily comparison...</div>;
+
+            const competitors = dailyData.competitors || [];
+            if (competitors.length === 0) return <div className="card p-6 text-center text-gray-400">No scan data available yet.</div>;
+
+            return (
+                <div>
+                    <div className="mb-4">
+                        <h2 className="text-lg font-semibold text-white mb-1">Daily Comparison</h2>
+                        <p className="text-sm text-gray-400">What changed today vs. yesterday for each competitor</p>
+                    </div>
+
+                    <div className="card overflow-hidden">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="table-header text-left text-gray-400 border-b border-gray-700">
+                                    <th className="px-4 py-3">Competitor</th>
+                                    <th className="px-4 py-3">Scan Date</th>
+                                    <th className="px-4 py-3">Scan Time</th>
+                                    <th className="px-4 py-3">Previous Scan</th>
+                                    <th className="px-4 py-3">Change</th>
+                                    <th className="px-4 py-3">Status</th>
+                                    <th className="px-4 py-3">Size Diff</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {competitors.map((comp) => {
+                                    if (comp.status === "no_comparison") {
+                                        return (
+                                            <tr key={comp.competitor} className="table-row border-b border-gray-700">
+                                                <td className="px-4 py-3 font-medium text-white">{comp.competitor}</td>
+                                                <td className="px-4 py-3 text-gray-400">{comp.latest_scan ? formatDate(comp.latest_scan) : "—"}</td>
+                                                <td className="px-4 py-3 text-gray-400">{comp.latest_scan ? formatTime(comp.latest_scan) : "—"}</td>
+                                                <td className="px-4 py-3 text-gray-500">—</td>
+                                                <td className="px-4 py-3 text-gray-500">—</td>
+                                                <td className="px-4 py-3"><Badge text="No data" type="nodata" /></td>
+                                                <td className="px-4 py-3 text-gray-500">—</td>
+                                            </tr>
+                                        );
+                                    }
+                                    const diffSign = comp.length_diff > 0 ? "+" : "";
+                                    return (
+                                        <tr key={comp.competitor} className="table-row border-b border-gray-700">
+                                            <td className="px-4 py-3 font-medium text-white">{comp.competitor}</td>
+                                            <td className="px-4 py-3 text-gray-300">{formatDate(comp.scan_date)}</td>
+                                            <td className="px-4 py-3 text-gray-300">{formatTime(comp.scan_date)}</td>
+                                            <td className="px-4 py-3 text-gray-400">{formatDateTime(comp.prev_date)}</td>
+                                            <td className="px-4 py-3"><ChangeBar percent={comp.change_percent} /></td>
+                                            <td className="px-4 py-3">
+                                                <Badge
+                                                    text={comp.is_significant ? "Significant" : "Minor"}
+                                                    type={comp.is_significant ? "significant" : "minor"}
+                                                />
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className={comp.length_diff > 0 ? "text-green-400" : comp.length_diff < 0 ? "text-red-400" : "text-gray-400"}>
+                                                    {diffSign}{comp.length_diff.toLocaleString()} chars
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        }
+
+        // --- Chart Component (shared between Weekly and Monthly) ---
+        function ChangeChart({ data, label, chartId }) {
+            const canvasRef = useRef(null);
+            const chartRef = useRef(null);
+
+            useEffect(() => {
+                if (!canvasRef.current || !data || data.length === 0) return;
+
+                // Destroy previous chart
+                if (chartRef.current) {
+                    chartRef.current.destroy();
+                }
+
+                const labels = data.map(e => {
+                    const d = new Date(e.date);
+                    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" });
+                });
+                const changePercents = data.map(e => e.change_percent);
+                const colors = changePercents.map(v => v > 15 ? "#ef4444" : v > 5 ? "#f59e0b" : "#22c55e");
+
+                chartRef.current = new Chart(canvasRef.current, {
+                    type: "bar",
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: "Change %",
+                            data: changePercents,
+                            backgroundColor: colors,
+                            borderRadius: 4,
+                            barThickness: data.length > 20 ? 8 : 16,
+                        }],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: (ctx) => `Change: ${ctx.parsed.y}%`,
+                                },
+                            },
+                        },
+                        scales: {
+                            x: {
+                                grid: { color: "#1e293b" },
+                                ticks: { color: "#94a3b8", font: { size: 11 } },
+                            },
+                            y: {
+                                grid: { color: "#1e293b" },
+                                ticks: { color: "#94a3b8", callback: (v) => v + "%" },
+                                beginAtZero: true,
+                            },
+                        },
+                    },
+                });
+
+                return () => {
+                    if (chartRef.current) chartRef.current.destroy();
+                };
+            }, [data]);
+
+            return (
+                <div className="chart-container">
+                    <canvas ref={canvasRef} id={chartId}></canvas>
+                </div>
+            );
+        }
+
+        // --- Period Report Tab (shared logic for Weekly and Monthly) ---
+        function PeriodReportPanel({ reportData, periodLabel }) {
+            const [selectedCompetitor, setSelectedCompetitor] = useState(null);
+
+            if (!reportData) return <div className="card p-6 text-center text-gray-400">Loading {periodLabel.toLowerCase()} report...</div>;
+
+            const competitors = reportData.competitors || [];
+            if (competitors.length === 0) return <div className="card p-6 text-center text-gray-400">No data for {periodLabel.toLowerCase()} report.</div>;
+
+            // Auto-select first competitor with data
+            const selected = selectedCompetitor || (competitors.find(c => c.entries && c.entries.length > 0) || competitors[0])?.competitor;
+            const selectedData = competitors.find(c => c.competitor === selected);
+
+            return (
+                <div>
+                    <div className="mb-4">
+                        <h2 className="text-lg font-semibold text-white mb-1">{periodLabel} Report</h2>
+                        <p className="text-sm text-gray-400">
+                            {periodLabel === "Weekly" ? "Last 7 days" : "Last 30 days"} — scan-by-scan comparison per competitor
+                        </p>
+                    </div>
+
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                        {competitors.map((comp) => {
+                            const isSelected = comp.competitor === selected;
+                            return (
+                                <div
+                                    key={comp.competitor}
+                                    onClick={() => setSelectedCompetitor(comp.competitor)}
+                                    className={`card p-4 cursor-pointer transition ${isSelected ? "border-blue-500" : "card-hover"}`}
+                                >
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h3 className="font-medium text-white">{comp.competitor}</h3>
+                                        <span className="text-xs text-gray-400">{comp.total_scans} scans</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-gray-400">Significant changes</span>
+                                        <span className={`text-sm font-semibold ${comp.significant_changes > 0 ? "text-red-400" : "text-green-400"}`}>
+                                            {comp.significant_changes}
+                                        </span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* Selected Competitor Detail */}
+                    {selectedData && selectedData.entries && selectedData.entries.length > 0 ? (
+                        <div>
+                            {/* Chart */}
+                            <div className="card p-5 mb-4">
+                                <h3 className="text-sm font-semibold text-white mb-3">
+                                    {selectedData.competitor} — Change % Over Time
+                                </h3>
+                                <ChangeChart
+                                    data={selectedData.entries}
+                                    label={selectedData.competitor}
+                                    chartId={`chart-${periodLabel}-${selected}`}
+                                />
+                            </div>
+
+                            {/* Detail Table */}
+                            <div className="card overflow-hidden">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="table-header text-left text-gray-400 border-b border-gray-700">
+                                            <th className="px-4 py-3">Date</th>
+                                            <th className="px-4 py-3">Time</th>
+                                            <th className="px-4 py-3">vs Previous</th>
+                                            <th className="px-4 py-3">Change</th>
+                                            <th className="px-4 py-3">Similarity</th>
+                                            <th className="px-4 py-3">Status</th>
+                                            <th className="px-4 py-3">Size Diff</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {selectedData.entries.map((entry, i) => {
+                                            const diffSign = entry.length_diff > 0 ? "+" : "";
+                                            return (
+                                                <tr key={i} className="table-row border-b border-gray-700">
+                                                    <td className="px-4 py-3 text-gray-300">{formatDate(entry.date)}</td>
+                                                    <td className="px-4 py-3 text-gray-300">{formatTime(entry.date)}</td>
+                                                    <td className="px-4 py-3 text-gray-400">{formatDateTime(entry.prev_date)}</td>
+                                                    <td className="px-4 py-3"><ChangeBar percent={entry.change_percent} /></td>
+                                                    <td className="px-4 py-3 text-gray-300">{(entry.similarity * 100).toFixed(1)}%</td>
+                                                    <td className="px-4 py-3">
+                                                        <Badge
+                                                            text={entry.is_significant ? "Significant" : "Minor"}
+                                                            type={entry.is_significant ? "significant" : "minor"}
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <span className={entry.length_diff > 0 ? "text-green-400" : entry.length_diff < 0 ? "text-red-400" : "text-gray-400"}>
+                                                            {diffSign}{entry.length_diff.toLocaleString()}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="card p-6 text-center text-gray-400">
+                            {selected ? `Not enough scan data for ${selected} in this period.` : "Select a competitor above."}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
         // --- Main App ---
         function App() {
             const [activeTab, setActiveTab] = useState("health");
@@ -203,6 +500,9 @@
             const [competitors, setCompetitors] = useState([]);
             const [selectedCompetitor, setSelectedCompetitor] = useState(null);
             const [scans, setScans] = useState(null);
+            const [dailyData, setDailyData] = useState(null);
+            const [weeklyData, setWeeklyData] = useState(null);
+            const [monthlyData, setMonthlyData] = useState(null);
             const [connected, setConnected] = useState(null);
 
             // Check API connection
@@ -222,6 +522,12 @@
                     fetchAPI("/health").then(setHealth);
                 } else if (activeTab === "trends") {
                     fetchAPI("/trends?days=30").then(setTrends);
+                } else if (activeTab === "daily") {
+                    fetchAPI("/reports/daily").then(setDailyData);
+                } else if (activeTab === "weekly") {
+                    fetchAPI("/reports/weekly").then(setWeeklyData);
+                } else if (activeTab === "monthly") {
+                    fetchAPI("/reports/monthly").then(setMonthlyData);
                 }
             }, [activeTab]);
 
@@ -236,6 +542,9 @@
                 { id: "health", label: "System Health" },
                 { id: "trends", label: "Trend Analysis" },
                 { id: "history", label: "Scan History" },
+                { id: "daily", label: "Daily Comparison" },
+                { id: "weekly", label: "Weekly Report" },
+                { id: "monthly", label: "Monthly Report" },
             ];
 
             return (
@@ -258,13 +567,13 @@
                     </header>
 
                     {/* Tabs */}
-                    <nav className="border-b border-gray-700 px-6">
+                    <nav className="border-b border-gray-700 px-6 overflow-x-auto">
                         <div className="max-w-7xl mx-auto flex gap-6">
                             {tabs.map((tab) => (
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
-                                    className={`py-3 text-sm font-medium ${
+                                    className={`py-3 text-sm font-medium whitespace-nowrap ${
                                         activeTab === tab.id ? "tab-active" : "tab-inactive"
                                     }`}
                                 >
@@ -297,12 +606,15 @@
                                 scans={scans}
                             />
                         )}
+                        {activeTab === "daily" && <DailyPanel dailyData={dailyData} />}
+                        {activeTab === "weekly" && <PeriodReportPanel reportData={weeklyData} periodLabel="Weekly" />}
+                        {activeTab === "monthly" && <PeriodReportPanel reportData={monthlyData} periodLabel="Monthly" />}
                     </main>
 
                     {/* Footer */}
                     <footer className="border-t border-gray-700 px-6 py-4 mt-8">
                         <div className="max-w-7xl mx-auto text-center text-sm text-gray-500">
-                            WatchTower AI v2.0 — Built by Marina Kurland
+                            WatchTower AI v4.1 — Built by Marina Kurland
                         </div>
                     </footer>
                 </div>
