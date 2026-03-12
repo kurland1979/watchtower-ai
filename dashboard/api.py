@@ -29,7 +29,7 @@ import sys
 import json
 import logging
 from functools import wraps
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 # Add project root to path
@@ -50,10 +50,16 @@ from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+DASHBOARD_DIR = os.path.dirname(__file__)
 
-# CORS — restricted to configured origins (not wide open)
-allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+app = Flask(__name__, static_folder=DASHBOARD_DIR)
+
+# CORS — restricted to configured origins
+# Includes "null" for local file:// access and localhost:5000 for same-origin fallback
+allowed_origins = os.getenv(
+    "CORS_ALLOWED_ORIGINS",
+    "http://localhost:3000,http://localhost:5000,null"
+).split(",")
 CORS(app, origins=[o.strip() for o in allowed_origins])
 
 
@@ -83,6 +89,16 @@ def require_api_key(f):
 
         return f(*args, **kwargs)
     return decorated
+
+
+# --- Dashboard Serving ---
+# Serves index.html on the same origin as the API.
+# This eliminates CORS issues entirely — browser sees one origin for everything.
+
+@app.route("/")
+def serve_dashboard():
+    """Serves the dashboard UI from the same Flask server."""
+    return send_from_directory(DASHBOARD_DIR, "index.html")
 
 
 # --- Health Endpoint (no auth — used by Docker/K8s liveness probes) ---

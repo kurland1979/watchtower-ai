@@ -38,7 +38,8 @@
         const { useState, useEffect, useRef } = React;
 
         // --- API Configuration ---
-        const API_BASE = "http://localhost:5000/api";
+        // Relative path — works when served from Flask (same origin, no CORS needed)
+        const API_BASE = "/api";
 
         // --- API Helper ---
         async function fetchAPI(endpoint) {
