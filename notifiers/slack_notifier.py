@@ -11,6 +11,7 @@ import logging
 import os
 import time
 import random
+from datetime import datetime
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
@@ -98,17 +99,23 @@ def format_report(analysis_results: list, client_name: str | None = None) -> str
     Formats the analysis results into a structured Slack message.
     Includes client name in the header when running in multi-client mode.
     """
+    report_time = datetime.now().strftime("%d/%m/%Y %H:%M")
+
     header = "WatchTower Daily Report"
     if client_name and client_name != "default":
         header += f" — {client_name}"
 
     if not analysis_results:
-        return f"✅ *{header}*\nNo significant competitor changes detected today."
+        return f"✅ *{header}*\n📅 {report_time}\nNo significant competitor changes detected today."
 
-    lines = [f"🔍 *{header}*\n"]
+    lines = [f"🔍 *{header}*", f"📅 {report_time}\n"]
 
     for result in analysis_results:
+        detected_at = result.get("detected_at") or datetime.now().strftime("%d/%m/%Y %H:%M")
+        severity = result.get("severity", "N/A")
         lines.append(f"*🏢 {result['name']}*")
+        lines.append(f"🕐 *Detected at:* {detected_at}")
+        lines.append(f"🔺 *Severity:* {severity}")
         lines.append(f"📌 *What changed:* {result['summary']}")
         lines.append(f"⚠️ *Implication:* {result['implication']}")
         lines.append(f"✅ *Recommended action:* {result['recommended_action']}")

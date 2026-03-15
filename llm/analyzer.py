@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import os
+from datetime import datetime
 from agents.storage import get_previous_scan, save_scan
 from parsers.text_chunker import smart_chunk
 
@@ -52,6 +53,10 @@ If no previous content is provided, analyze the current content for notable info
 
 Respond in this exact format:
 SIGNIFICANT_CHANGE: YES or NO
+SEVERITY: LOW, MEDIUM, or HIGH
+  - LOW: minor text edits, small wording changes
+  - MEDIUM: new feature announcement, partnership, integration update
+  - HIGH: pricing change, new product launch, major strategic shift
 SUMMARY: (one sentence summary of what changed, or "No significant changes detected")
 IMPLICATION: (one sentence on what this means for us, or "N/A")
 RECOMMENDED_ACTION: (one sentence recommendation, or "N/A")
@@ -78,6 +83,7 @@ async def analyze_competitor(parsed_result: dict, industry: str | None = None) -
             "name": name,
             "url": url,
             "significant_change": False,
+            "severity": "LOW",
             "summary": "Data unavailable - scraping failed",
             "implication": "N/A",
             "recommended_action": "Check scraper logs",
@@ -132,12 +138,13 @@ TODAY'S CONTENT:
 
         save_scan(name, current_text)
 
-        logger.info(f"Analysis complete for {name} - significant change: {parsed['significant_change']}")
+        logger.info(f"Analysis complete for {name} - significant change: {parsed['significant_change']}, severity: {parsed['severity']}")
 
         return {
             "name": name,
             "url": url,
             **parsed,
+            "detected_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
             "status": "success"
         }
 
@@ -147,6 +154,7 @@ TODAY'S CONTENT:
             "name": name,
             "url": url,
             "significant_change": False,
+            "severity": "LOW",
             "summary": "Analysis failed",
             "implication": "N/A",
             "recommended_action": "Check LLM logs",
@@ -160,6 +168,7 @@ def _parse_response(response_text: str) -> dict:
     """
     result = {
         "significant_change": False,
+        "severity": "LOW",
         "summary": "N/A",
         "implication": "N/A",
         "recommended_action": "N/A"
@@ -168,6 +177,10 @@ def _parse_response(response_text: str) -> dict:
     for line in response_text.strip().split("\n"):
         if line.startswith("SIGNIFICANT_CHANGE:"):
             result["significant_change"] = "YES" in line.upper()
+        elif line.startswith("SEVERITY:"):
+            severity_value = line.replace("SEVERITY:", "").strip().upper()
+            if severity_value in ("LOW", "MEDIUM", "HIGH"):
+                result["severity"] = severity_value
         elif line.startswith("SUMMARY:"):
             result["summary"] = line.replace("SUMMARY:", "").strip()
         elif line.startswith("IMPLICATION:"):

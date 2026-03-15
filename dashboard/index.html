@@ -517,18 +517,18 @@
                 });
             }, []);
 
-            // Load tab data
+            // Load tab data — only if not already cached in state
             useEffect(() => {
                 if (activeTab === "health") {
                     fetchAPI("/health").then(setHealth);
                 } else if (activeTab === "trends") {
-                    fetchAPI("/trends?days=30").then(setTrends);
+                    if (!trends) fetchAPI("/trends?days=30").then(setTrends);
                 } else if (activeTab === "daily") {
-                    fetchAPI("/reports/daily").then(setDailyData);
+                    if (!dailyData) fetchAPI("/reports/daily").then(setDailyData);
                 } else if (activeTab === "weekly") {
-                    fetchAPI("/reports/weekly").then(setWeeklyData);
+                    if (!weeklyData) fetchAPI("/reports/weekly").then(setWeeklyData);
                 } else if (activeTab === "monthly") {
-                    fetchAPI("/reports/monthly").then(setMonthlyData);
+                    if (!monthlyData) fetchAPI("/reports/monthly").then(setMonthlyData);
                 }
             }, [activeTab]);
 
