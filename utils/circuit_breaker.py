@@ -1,5 +1,5 @@
 """
-Circuit Breaker Pattern.
+Circuit Breaker Pattern — SQLite-Backed Persistence.
 
 When a competitor's website is persistently down, retrying every day wastes
 time and API resources. The circuit breaker stops retrying after N consecutive
@@ -9,6 +9,11 @@ States:
     CLOSED  — Normal operation. Requests pass through. Failures increment counter.
     OPEN    — Requests are blocked. After timeout, transitions to HALF_OPEN.
     HALF_OPEN — One test request is allowed. Success → CLOSED. Failure → OPEN.
+
+Persistence:
+    State is stored in SQLite (same DB as scans) instead of a JSON file.
+    Why? SQLite handles concurrent writes safely, supports atomic updates,
+    and doesn't corrupt on unexpected process termination.
 
 Usage:
     cb = CircuitBreaker()
@@ -22,7 +27,7 @@ Usage:
         logger.info("Circuit OPEN for CrowdStrike — skipping")
 """
 
-import json
+import sqlite3
 import os
 import logging
 from datetime import datetime, timedelta
@@ -31,52 +36,107 @@ from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-STATE_FILE = os.path.join(os.path.dirname(__file__), "..", "logs", "circuit_breaker.json")
+# Use the same database as storage — keeps everything in one place
+DB_FILE = os.path.join(os.path.dirname(__file__), "..", "logs", "watchtower.db")
 
 # States
 CLOSED = "closed"
 OPEN = "open"
 HALF_OPEN = "half_open"
 
+# Module-level flag — table creation runs only once
+_cb_initialized = False
+
+
+def _init_cb_table() -> None:
+    """Creates the circuit_breaker table if it doesn't exist. Runs once per process."""
+    global _cb_initialized
+    if _cb_initialized:
+        return
+
+    os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS circuit_breaker (
+                name TEXT PRIMARY KEY,
+                state TEXT NOT NULL DEFAULT 'closed',
+                failure_count INTEGER NOT NULL DEFAULT 0,
+                last_failure TEXT,
+                opened_at TEXT
+            )
+        """)
+        conn.commit()
+        _cb_initialized = True
+    finally:
+        conn.close()
+
+
+def _get_cb_connection() -> sqlite3.Connection:
+    """Returns a SQLite connection with the circuit_breaker table ready."""
+    _init_cb_table()
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row  # Access columns by name
+    return conn
+
 
 class CircuitBreaker:
     """
-    Per-competitor circuit breaker with persistent state.
-    State survives across agent runs (stored in JSON file).
+    Per-competitor circuit breaker with SQLite-backed persistence.
+    State survives process restarts, is safe for concurrent access,
+    and won't corrupt on unexpected shutdown.
     """
 
-    def __init__(self):
-        self._states = self._load_state()
-
-    def _load_state(self) -> dict:
-        """Loads circuit breaker state from JSON file."""
-        if not os.path.exists(STATE_FILE):
-            return {}
-        try:
-            with open(STATE_FILE, "r") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, Exception):
-            return {}
-
-    def _save_state(self) -> None:
-        """Persists current state to JSON file."""
-        try:
-            os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
-            with open(STATE_FILE, "w") as f:
-                json.dump(self._states, f, indent=2)
-        except Exception as e:
-            logger.error(f"Failed to save circuit breaker state: {e}")
-
     def _get_entry(self, name: str) -> dict:
-        """Gets or creates a circuit breaker entry for a competitor."""
-        if name not in self._states:
-            self._states[name] = {
+        """Gets circuit breaker entry for a competitor. Creates default if missing."""
+        conn = _get_cb_connection()
+        try:
+            row = conn.execute(
+                "SELECT state, failure_count, last_failure, opened_at FROM circuit_breaker WHERE name = ?",
+                (name,)
+            ).fetchone()
+
+            if row:
+                return {
+                    "state": row["state"],
+                    "failure_count": row["failure_count"],
+                    "last_failure": row["last_failure"],
+                    "opened_at": row["opened_at"],
+                }
+
+            # Insert default entry
+            conn.execute(
+                "INSERT INTO circuit_breaker (name, state, failure_count) VALUES (?, ?, ?)",
+                (name, CLOSED, 0)
+            )
+            conn.commit()
+            return {
                 "state": CLOSED,
                 "failure_count": 0,
                 "last_failure": None,
                 "opened_at": None,
             }
-        return self._states[name]
+        finally:
+            conn.close()
+
+    def _save_entry(self, name: str, entry: dict) -> None:
+        """Persists a circuit breaker entry to SQLite."""
+        conn = _get_cb_connection()
+        try:
+            conn.execute("""
+                INSERT INTO circuit_breaker (name, state, failure_count, last_failure, opened_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(name) DO UPDATE SET
+                    state = excluded.state,
+                    failure_count = excluded.failure_count,
+                    last_failure = excluded.last_failure,
+                    opened_at = excluded.opened_at
+            """, (name, entry["state"], entry["failure_count"], entry["last_failure"], entry["opened_at"]))
+            conn.commit()
+        except Exception as e:
+            logger.error(f"Failed to save circuit breaker state for {name}: {e}")
+        finally:
+            conn.close()
 
     def can_execute(self, name: str) -> bool:
         """
@@ -99,7 +159,7 @@ class CircuitBreaker:
                 timeout = timedelta(hours=settings.CIRCUIT_BREAKER_TIMEOUT_HOURS)
                 if datetime.now() - opened_time > timeout:
                     entry["state"] = HALF_OPEN
-                    self._save_state()
+                    self._save_entry(name, entry)
                     logger.info(f"Circuit breaker HALF_OPEN for {name} — allowing test request")
                     return True
             return False
@@ -112,13 +172,15 @@ class CircuitBreaker:
     def record_success(self, name: str) -> None:
         """Records a successful request. Resets circuit to CLOSED."""
         entry = self._get_entry(name)
+        was_open = entry["state"] != CLOSED
+
         entry["state"] = CLOSED
         entry["failure_count"] = 0
         entry["last_failure"] = None
         entry["opened_at"] = None
-        self._save_state()
+        self._save_entry(name, entry)
 
-        if entry.get("state") != CLOSED:
+        if was_open:
             logger.info(f"Circuit breaker CLOSED for {name} — competitor is back online")
 
     def record_failure(self, name: str) -> None:
@@ -142,15 +204,23 @@ class CircuitBreaker:
             entry["opened_at"] = datetime.now().isoformat()
             logger.warning(f"Circuit breaker re-OPENED for {name} — test request failed")
 
-        self._save_state()
+        self._save_entry(name, entry)
 
     def get_status(self) -> dict:
         """Returns status of all circuit breakers. Used by dashboard."""
-        return {name: info["state"] for name, info in self._states.items()}
+        conn = _get_cb_connection()
+        try:
+            rows = conn.execute("SELECT name, state FROM circuit_breaker").fetchall()
+            return {row["name"]: row["state"] for row in rows}
+        finally:
+            conn.close()
 
     def reset(self, name: str) -> None:
         """Manually resets a circuit breaker to CLOSED."""
-        if name in self._states:
-            del self._states[name]
-            self._save_state()
+        conn = _get_cb_connection()
+        try:
+            conn.execute("DELETE FROM circuit_breaker WHERE name = ?", (name,))
+            conn.commit()
             logger.info(f"Circuit breaker manually reset for {name}")
+        finally:
+            conn.close()

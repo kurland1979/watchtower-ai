@@ -8,25 +8,58 @@ logger = logging.getLogger(__name__)
 STORAGE_DIR = os.path.join(os.path.dirname(__file__), "..", "logs")
 DB_FILE = os.path.join(STORAGE_DIR, "watchtower.db")
 
+# Module-level flag — ensures table creation runs only once per process
+_initialized = False
 
-def _get_connection() -> sqlite3.Connection:
-    """Creates a connection to the SQLite database and ensures the table exists."""
+
+def init_db() -> None:
+    """
+    One-time database initialization: creates tables and indexes.
+
+    Called once at startup (or lazily on first connection).
+    Uses a module-level flag so it never runs twice in the same process.
+
+    Why separate from _get_connection?
+    - CREATE TABLE IF NOT EXISTS is cheap but pointless to run on every query.
+    - In production, _get_connection is called hundreds of times per day.
+    - Separation follows the Single Responsibility Principle:
+      init_db() handles schema, _get_connection() handles connections.
+    """
+    global _initialized
+    if _initialized:
+        return
+
     os.makedirs(STORAGE_DIR, exist_ok=True)
     conn = sqlite3.connect(DB_FILE)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS scans (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            competitor_name TEXT NOT NULL,
-            text TEXT NOT NULL,
-            timestamp TEXT NOT NULL
-        )
-    """)
-    conn.execute("""
-        CREATE INDEX IF NOT EXISTS idx_scans_competitor
-        ON scans (competitor_name, timestamp DESC)
-    """)
-    conn.commit()
-    return conn
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS scans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                competitor_name TEXT NOT NULL,
+                text TEXT NOT NULL,
+                timestamp TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_scans_competitor
+            ON scans (competitor_name, timestamp DESC)
+        """)
+        conn.commit()
+        _initialized = True
+        logger.info("Database initialized successfully")
+    finally:
+        conn.close()
+
+
+def _get_connection() -> sqlite3.Connection:
+    """
+    Returns a connection to the SQLite database.
+
+    Ensures init_db() has run at least once (lazy initialization).
+    After that, just connects — no schema operations.
+    """
+    init_db()
+    return sqlite3.connect(DB_FILE)
 
 
 def save_scan(competitor_name: str, text: str) -> bool:

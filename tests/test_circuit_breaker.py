@@ -7,7 +7,6 @@ threshold behavior, timeout recovery, persistence, manual reset.
 
 import pytest
 import os
-import json
 from unittest.mock import patch
 from datetime import datetime, timedelta
 
@@ -16,9 +15,10 @@ from utils.circuit_breaker import CircuitBreaker, CLOSED, OPEN, HALF_OPEN
 
 @pytest.fixture
 def cb(tmp_path):
-    """Create a CircuitBreaker with a temporary state file."""
-    state_file = str(tmp_path / "cb_state.json")
-    with patch("utils.circuit_breaker.STATE_FILE", state_file):
+    """Create a CircuitBreaker with a temporary SQLite database."""
+    db_file = str(tmp_path / "test_cb.db")
+    with patch("utils.circuit_breaker.DB_FILE", db_file), \
+         patch("utils.circuit_breaker._cb_initialized", False):
         yield CircuitBreaker()
 
 
@@ -56,12 +56,12 @@ class TestCircuitBreakerStates:
         for _ in range(settings.CIRCUIT_BREAKER_THRESHOLD):
             cb.record_failure("CorpD")
 
-        # Force HALF_OPEN by backdating opened_at
+        # Force HALF_OPEN by backdating opened_at directly in DB
         entry = cb._get_entry("CorpD")
         entry["opened_at"] = (
             datetime.now() - timedelta(hours=settings.CIRCUIT_BREAKER_TIMEOUT_HOURS + 1)
         ).isoformat()
-        cb._save_state()
+        cb._save_entry("CorpD", entry)
 
         # Should be HALF_OPEN now
         assert cb.can_execute("CorpD") is True
@@ -76,28 +76,29 @@ class TestCircuitBreakerStates:
         for _ in range(settings.CIRCUIT_BREAKER_THRESHOLD):
             cb.record_failure("CorpE")
 
-        # Force HALF_OPEN
+        # Force HALF_OPEN directly in DB
         entry = cb._get_entry("CorpE")
         entry["state"] = HALF_OPEN
-        cb._save_state()
+        cb._save_entry("CorpE", entry)
 
         cb.record_failure("CorpE")
         assert cb.can_execute("CorpE") is False
 
 
 class TestCircuitBreakerPersistence:
-    """Tests for state persistence."""
+    """Tests for state persistence across instances."""
 
     def test_state_survives_reload(self, tmp_path):
         """State should persist across CircuitBreaker instances."""
-        state_file = str(tmp_path / "cb_persist.json")
-        with patch("utils.circuit_breaker.STATE_FILE", state_file):
+        db_file = str(tmp_path / "test_persist.db")
+        with patch("utils.circuit_breaker.DB_FILE", db_file), \
+             patch("utils.circuit_breaker._cb_initialized", False):
             cb1 = CircuitBreaker()
             from config.settings import settings
             for _ in range(settings.CIRCUIT_BREAKER_THRESHOLD):
                 cb1.record_failure("PersistCorp")
 
-            # New instance should load persisted state
+            # New instance should load persisted state from SQLite
             cb2 = CircuitBreaker()
             assert cb2.can_execute("PersistCorp") is False
 

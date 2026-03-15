@@ -10,16 +10,17 @@ import os
 import sqlite3
 from unittest.mock import patch
 
-from agents.storage import save_scan, get_previous_scan, _get_connection, DB_FILE
+from agents.storage import save_scan, get_previous_scan, _get_connection, init_db, DB_FILE
 
 
 @pytest.fixture(autouse=True)
 def clean_db(tmp_path):
     """Use a temporary database for each test to avoid cross-contamination."""
     test_db = str(tmp_path / "test_watchtower.db")
-    with patch("agents.storage.DB_FILE", test_db):
-        with patch("agents.storage.STORAGE_DIR", str(tmp_path)):
-            yield test_db
+    with patch("agents.storage.DB_FILE", test_db), \
+         patch("agents.storage.STORAGE_DIR", str(tmp_path)), \
+         patch("agents.storage._initialized", False):
+        yield test_db
 
 
 class TestSaveScan:
@@ -86,3 +87,33 @@ class TestSaveScan:
                 assert result is True
                 retrieved = get_previous_scan("TestCorp")
                 assert retrieved == "שלום עולם 🚀"
+
+
+class TestInitDb:
+    """Tests for the init_db one-time initialization."""
+
+    def test_init_creates_table(self, tmp_path):
+        """init_db should create the scans table."""
+        test_db = str(tmp_path / "init_test.db")
+        with patch("agents.storage.DB_FILE", test_db), \
+             patch("agents.storage.STORAGE_DIR", str(tmp_path)), \
+             patch("agents.storage._initialized", False):
+            init_db()
+            # Verify table exists by querying it
+            conn = sqlite3.connect(test_db)
+            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='scans'")
+            assert cursor.fetchone() is not None
+            conn.close()
+
+    def test_init_runs_only_once(self, tmp_path):
+        """init_db should only execute CREATE TABLE once per process."""
+        test_db = str(tmp_path / "once_test.db")
+        import agents.storage as storage_mod
+        with patch.object(storage_mod, "DB_FILE", test_db), \
+             patch.object(storage_mod, "STORAGE_DIR", str(tmp_path)), \
+             patch.object(storage_mod, "_initialized", False):
+            init_db()
+            # After first call, _initialized should be True
+            assert storage_mod._initialized is True
+            # Second call should be a no-op (no error even if DB is gone)
+            init_db()
